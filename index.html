@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Shadow Jumper</title>
+<style>
+  body {
+    margin: 0;
+    background: #0a0f1f;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  canvas {
+    margin-top: 10px;
+    background: #111;
+    display: block;
+    border: 2px solid #333;
+    border-radius: 8px;
+  }
+  #hud {
+    margin-top: 8px;
+    font-size: 18px;
+  }
+  button {
+    margin-top: 10px;
+    padding: 6px 12px;
+    background: #222;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  button:hover { background: #333; }
+</style>
+</head>
+<body>
+<h2>🕹️ Shadow Jumper</h2>
+<canvas id="game" width="600" height="600"></canvas>
+<div id="hud">Score: <span id="score">0</span></div>
+<button id="restart">Restart</button>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const size = 10; // grid size 10x10
+const tile = canvas.width / size;
+
+let player, grid, score, running, fallTimer;
+
+function initGame() {
+  // 2D grid: true = tile exists
+  grid = Array.from({ length: size }, () => Array(size).fill(true));
+
+  player = { x: Math.floor(size/2), y: Math.floor(size/2), vy: 0, jumping: false };
+  score = 0;
+  running = true;
+  fallTimer = 0;
+  updateHUD();
+}
+
+function updateHUD() {
+  document.getElementById("score").textContent = score;
+}
+
+function loop() {
+  if (!running) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function update() {
+  score++;
+  updateHUD();
+
+  // drop tiles every ~90 frames
+  fallTimer++;
+  if (fallTimer > 90) {
+    fallTimer = 0;
+    let rx = Math.floor(Math.random() * size);
+    let ry = Math.floor(Math.random() * size);
+    grid[ry][rx] = false;
+  }
+
+  // gravity
+  if (!onGround(player.x, player.y)) {
+    player.vy += 0.15;
+    player.y += player.vy;
+    player.jumping = true;
+  } else {
+    player.vy = 0;
+    player.y = Math.floor(player.y);
+    player.jumping = false;
+  }
+
+  // check fall off
+  if (player.y >= size) {
+    running = false;
+    setTimeout(() => alert("Game Over! Final Score: " + score), 100);
+  }
+}
+
+function onGround(x, y) {
+  let gx = Math.floor(x), gy = Math.floor(y+0.5);
+  return gy < size && grid[gy] && grid[gy][gx];
+}
+
+function draw() {
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // draw tiles
+  for (let y=0;y<size;y++) {
+    for (let x=0;x<size;x++) {
+      if (grid[y][x]) {
+        ctx.fillStyle = "#2a2";
+        ctx.fillRect(x*tile, y*tile, tile-2, tile-2);
+      }
+    }
+  }
+
+  // draw player
+  ctx.fillStyle = "#0ff";
+  ctx.fillRect(player.x*tile, player.y*tile, tile-2, tile-2);
+}
+
+// controls
+window.addEventListener("keydown", e => {
+  if (!running) return;
+  if (e.key === "ArrowLeft" || e.key === "a") player.x = Math.max(0, player.x-1);
+  if (e.key === "ArrowRight" || e.key === "d") player.x = Math.min(size-1, player.x+1);
+  if ((e.key === " " || e.key === "ArrowUp" || e.key === "w") && !player.jumping) {
+    player.vy = -0.5;
+    player.jumping = true;
+  }
+});
+
+document.getElementById("restart").addEventListener("click", () => {
+  initGame();
+  loop();
+});
+
+// start
+initGame();
+loop();
+</script>
+</body>
+</html>
