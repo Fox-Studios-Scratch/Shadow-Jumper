@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gem Collector</title>
+  <title>Gem Collector+</title>
   <style>
     body {
       margin: 0;
@@ -19,101 +19,124 @@
       display: block;
       border: 3px solid white;
     }
+    #menu {
+      position: absolute;
+      text-align: center;
+      color: white;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 18px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
+  <div id="menu">
+    <h1>Gem Collector+</h1>
+    <p>Collect gems, avoid enemies, and use powerups!</p>
+    <button onclick="startGame()">Start Game</button>
+    <p id="highscore">High Score: 0</p>
+  </div>
   <canvas id="game" width="500" height="500"></canvas>
   <script>
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
+    const menu = document.getElementById("menu");
+    const highScoreText = document.getElementById("highscore");
 
-    let player = { x: 50, y: 50, size: 20, speed: 3, normalSpeed: 3, shield: false };
-    let gems = [];
-    let enemies = [];
-    let powerups = [];
-    let score = 0;
-    let gameOver = false;
-    let keys = {}; // track pressed keys
-    let gemsCollected = 0;
+    let player, gems, enemies, powerups, keys, score, lives, gameOver, gameRunning, highScore;
 
-    function getRandomGridPos(size) {
-      return Math.floor(Math.random() * ((canvas.width - size) / size)) * size;
+    // --- INIT ---
+    function init() {
+      player = { x: 250, y: 250, size: 20, speed: 3, dx: 0, dy: 0 };
+      gems = [];
+      enemies = [];
+      powerups = [];
+      keys = {};
+      score = 0;
+      lives = 3;
+      gameOver = false;
+      gameRunning = true;
+      spawnGem();
+      spawnEnemy();
     }
 
+    // --- SPAWN ---
     function spawnGem() {
       const size = 15;
-      gems.push({
-        x: getRandomGridPos(size),
-        y: getRandomGridPos(size),
-        size: size
-      });
+      let x = Math.floor(Math.random() * (canvas.width / size)) * size;
+      let y = Math.floor(Math.random() * (canvas.height / size)) * size;
+      gems.push({ x, y, size });
     }
 
     function spawnEnemy() {
-      let enemy;
-      let safeDistance = 80; // min distance from player
-      do {
-        enemy = {
-          x: Math.random() * (canvas.width - 20),
-          y: Math.random() * (canvas.height - 20),
-          size: 20,
-          speed: 1 + Math.random() * 1.5
-        };
-      } while (Math.hypot(enemy.x - player.x, enemy.y - player.y) < safeDistance);
+      let enemy = {
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: 20,
+        speed: 1 + Math.random() * 1.5,
+        frozen: false
+      };
+      // Prevent spawn on player
+      if (Math.abs(enemy.x - player.x) < 40 && Math.abs(enemy.y - player.y) < 40) {
+        return spawnEnemy();
+      }
       enemies.push(enemy);
     }
 
     function spawnPowerup() {
-      const types = ["speed", "shield"];
+      const types = ["speed", "shield", "freeze", "bomb", "extraLife", "multiplier"];
       const type = types[Math.floor(Math.random() * types.length)];
-      const size = 15;
       powerups.push({
-        x: getRandomGridPos(size),
-        y: getRandomGridPos(size),
-        size: size,
-        type: type
+        x: Math.random() * (canvas.width - 20),
+        y: Math.random() * (canvas.height - 20),
+        size: 15,
+        type,
+        duration: 5000
       });
     }
 
+    // --- DRAW ---
     function drawPlayer() {
-      ctx.fillStyle = player.shield ? "gold" : "cyan";
+      ctx.fillStyle = "cyan";
       ctx.fillRect(player.x, player.y, player.size, player.size);
     }
 
     function drawGems() {
       ctx.fillStyle = "lime";
-      for (let gem of gems) {
-        ctx.fillRect(gem.x, gem.y, gem.size, gem.size);
-      }
+      for (let gem of gems) ctx.fillRect(gem.x, gem.y, gem.size, gem.size);
     }
 
     function drawEnemies() {
       ctx.fillStyle = "red";
-      for (let enemy of enemies) {
-        ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
-      }
+      for (let e of enemies) ctx.fillRect(e.x, e.y, e.size, e.size);
     }
 
     function drawPowerups() {
       for (let p of powerups) {
-        ctx.fillStyle = p.type === "speed" ? "blue" : "yellow";
+        ctx.fillStyle =
+          p.type === "speed" ? "yellow" :
+          p.type === "shield" ? "blue" :
+          p.type === "freeze" ? "lightblue" :
+          p.type === "bomb" ? "orange" :
+          p.type === "extraLife" ? "pink" : "purple";
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
     }
 
-    function drawScore() {
+    function drawHUD() {
       ctx.fillStyle = "white";
       ctx.font = "18px Arial";
       ctx.fillText("Score: " + score, 10, 20);
+      ctx.fillText("Lives: " + lives, 10, 40);
     }
 
+    // --- UPDATE ---
     function updatePlayer() {
-      if (keys["ArrowUp"] || keys["w"]) player.y -= player.speed;
-      if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
-      if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
-      if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
-
-      // Keep inside bounds
+      player.x += player.dx;
+      player.y += player.dy;
       if (player.x < 0) player.x = 0;
       if (player.y < 0) player.y = 0;
       if (player.x > canvas.width - player.size) player.x = canvas.width - player.size;
@@ -121,77 +144,48 @@
     }
 
     function updateEnemies() {
-      for (let enemy of enemies) {
-        let dx = player.x - enemy.x;
-        let dy = player.y - enemy.y;
-        let dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist > 0) {
-          enemy.x += (dx / dist) * enemy.speed;
-          enemy.y += (dy / dist) * enemy.speed;
+      for (let e of enemies) {
+        if (!e.frozen) {
+          let dx = player.x - e.x;
+          let dy = player.y - e.y;
+          let dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 0) {
+            e.x += (dx / dist) * e.speed;
+            e.y += (dy / dist) * e.speed;
+          }
         }
-
         // Collision with player
         if (
-          player.x < enemy.x + enemy.size &&
-          player.x + player.size > enemy.x &&
-          player.y < enemy.y + enemy.size &&
-          player.y + player.size > enemy.y
+          player.x < e.x + e.size &&
+          player.x + player.size > e.x &&
+          player.y < e.y + e.size &&
+          player.y + player.size > e.y
         ) {
-          if (player.shield) {
-            enemies.splice(enemies.indexOf(enemy), 1);
-            player.shield = false;
-          } else {
-            gameOver = true;
-          }
+          enemies.splice(enemies.indexOf(e), 1);
+          lives--;
+          if (lives <= 0) endGame();
         }
       }
     }
 
-    function gameLoop() {
-      if (gameOver) {
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "red";
-        ctx.font = "40px Arial";
-        ctx.fillText("GAME OVER", canvas.width / 2 - 120, canvas.height / 2);
-        ctx.fillStyle = "white";
-        ctx.font = "20px Arial";
-        ctx.fillText("Final Score: " + score, canvas.width / 2 - 70, canvas.height / 2 + 40);
-        return;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      updatePlayer();
-      drawPlayer();
-      drawGems();
-      drawEnemies();
-      drawPowerups();
-      drawScore();
-      updateEnemies();
-
-      // Collision with gems
+    function updateCollisions() {
+      // Gems
       for (let i = 0; i < gems.length; i++) {
+        let g = gems[i];
         if (
-          player.x < gems[i].x + gems[i].size &&
-          player.x + player.size > gems[i].x &&
-          player.y < gems[i].y + gems[i].size &&
-          player.y + player.size > gems[i].y
+          player.x < g.x + g.size &&
+          player.x + player.size > g.x &&
+          player.y < g.y + g.size &&
+          player.y + player.size > g.y
         ) {
           gems.splice(i, 1);
           score++;
-          gemsCollected++;
           spawnGem();
-
-          // only spawn enemy every 3 gems
-          if (gemsCollected % 3 === 0) spawnEnemy();
-
-          // higher chance of powerups (50%)
-          if (Math.random() < 0.5) spawnPowerup();
+          if (Math.random() < 0.3) spawnPowerup();
+          if (Math.random() < 0.4) spawnEnemy();
         }
       }
-
-      // Collision with powerups
+      // Powerups
       for (let i = 0; i < powerups.length; i++) {
         let p = powerups[i];
         if (
@@ -200,29 +194,80 @@
           player.y < p.y + p.size &&
           player.y + player.size > p.y
         ) {
-          if (p.type === "speed") {
-            player.speed = 6;
-            setTimeout(() => (player.speed = player.normalSpeed), 5000);
-          } else if (p.type === "shield") {
-            player.shield = true;
+          if (p.type === "speed") player.speed = 6, setTimeout(() => (player.speed = 3), p.duration);
+          if (p.type === "shield") lives++;
+          if (p.type === "freeze") enemies.forEach(e => (e.frozen = true)), setTimeout(() => enemies.forEach(e => (e.frozen = false)), p.duration);
+          if (p.type === "bomb") enemies = [];
+          if (p.type === "extraLife") lives++;
+          if (p.type === "multiplier") {
+            let oldAdd = score;
+            score += 5; // bonus
           }
           powerups.splice(i, 1);
         }
       }
+    }
+
+    // --- GAME LOOP ---
+    function gameLoop() {
+      if (!gameRunning) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawPlayer();
+      drawGems();
+      drawEnemies();
+      drawPowerups();
+      drawHUD();
+
+      updatePlayer();
+      updateEnemies();
+      updateCollisions();
 
       requestAnimationFrame(gameLoop);
     }
 
+    // --- END GAME ---
+    function endGame() {
+      gameRunning = false;
+      if (score > highScore) {
+        highScore = score;
+        localStorage.setItem("highScore", highScore);
+      }
+      menu.style.display = "block";
+      menu.innerHTML = `
+        <h1>Game Over</h1>
+        <p>Score: ${score}</p>
+        <p>High Score: ${highScore}</p>
+        <button onclick="startGame()">Restart</button>
+      `;
+    }
+
+    // --- START ---
+    function startGame() {
+      init();
+      menu.style.display = "none";
+      gameLoop();
+    }
+
+    // --- INPUT ---
     window.addEventListener("keydown", (e) => {
       keys[e.key] = true;
-    });
-    window.addEventListener("keyup", (e) => {
-      keys[e.key] = false;
+      if (keys["ArrowUp"]) player.dy = -player.speed;
+      if (keys["ArrowDown"]) player.dy = player.speed;
+      if (keys["ArrowLeft"]) player.dx = -player.speed;
+      if (keys["ArrowRight"]) player.dx = player.speed;
     });
 
-    spawnGem();
-    spawnEnemy();
-    gameLoop();
+    window.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
+      if (!keys["ArrowUp"] && !keys["ArrowDown"]) player.dy = 0;
+      if (!keys["ArrowLeft"] && !keys["ArrowRight"]) player.dx = 0;
+    });
+
+    // Load high score
+    highScore = localStorage.getItem("highScore") || 0;
+    highScoreText.textContent = "High Score: " + highScore;
   </script>
 </body>
 </html>
