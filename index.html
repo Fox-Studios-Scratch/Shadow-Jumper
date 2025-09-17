@@ -27,32 +27,50 @@
     const canvas = document.getElementById("game");
     const ctx = canvas.getContext("2d");
 
-    let player = { x: 50, y: 50, size: 20, speed: 20 };
+    let player = { x: 50, y: 50, size: 20, speed: 3, normalSpeed: 3, shield: false };
     let gems = [];
     let enemies = [];
+    let powerups = [];
     let score = 0;
     let gameOver = false;
+    let keys = {}; // track pressed keys
+
+    function getRandomGridPos(size) {
+      return Math.floor(Math.random() * ((canvas.width - size) / size)) * size;
+    }
 
     function spawnGem() {
       const size = 15;
       gems.push({
-        x: Math.floor(Math.random() * (canvas.width / size)) * size,
-        y: Math.floor(Math.random() * (canvas.height / size)) * size,
+        x: getRandomGridPos(size),
+        y: getRandomGridPos(size),
         size: size
       });
     }
 
     function spawnEnemy() {
       enemies.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+        x: Math.random() * (canvas.width - 20),
+        y: Math.random() * (canvas.height - 20),
         size: 20,
         speed: 1 + Math.random() * 1.5
       });
     }
 
+    function spawnPowerup() {
+      const types = ["speed", "shield"];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const size = 15;
+      powerups.push({
+        x: getRandomGridPos(size),
+        y: getRandomGridPos(size),
+        size: size,
+        type: type
+      });
+    }
+
     function drawPlayer() {
-      ctx.fillStyle = "cyan";
+      ctx.fillStyle = player.shield ? "gold" : "cyan";
       ctx.fillRect(player.x, player.y, player.size, player.size);
     }
 
@@ -70,10 +88,30 @@
       }
     }
 
+    function drawPowerups() {
+      for (let p of powerups) {
+        ctx.fillStyle = p.type === "speed" ? "blue" : "yellow";
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      }
+    }
+
     function drawScore() {
       ctx.fillStyle = "white";
       ctx.font = "18px Arial";
       ctx.fillText("Score: " + score, 10, 20);
+    }
+
+    function updatePlayer() {
+      if (keys["ArrowUp"] || keys["w"]) player.y -= player.speed;
+      if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
+      if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
+      if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
+
+      // Keep inside bounds
+      if (player.x < 0) player.x = 0;
+      if (player.y < 0) player.y = 0;
+      if (player.x > canvas.width - player.size) player.x = canvas.width - player.size;
+      if (player.y > canvas.height - player.size) player.y = canvas.height - player.size;
     }
 
     function updateEnemies() {
@@ -87,14 +125,19 @@
           enemy.y += (dy / dist) * enemy.speed;
         }
 
-        // Collision with player → Game Over
+        // Collision with player
         if (
           player.x < enemy.x + enemy.size &&
           player.x + player.size > enemy.x &&
           player.y < enemy.y + enemy.size &&
           player.y + player.size > enemy.y
         ) {
-          gameOver = true;
+          if (player.shield) {
+            enemies.splice(enemies.indexOf(enemy), 1);
+            player.shield = false;
+          } else {
+            gameOver = true;
+          }
         }
       }
     }
@@ -113,9 +156,11 @@
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      updatePlayer();
       drawPlayer();
       drawGems();
       drawEnemies();
+      drawPowerups();
       drawScore();
       updateEnemies();
 
@@ -130,7 +175,27 @@
           gems.splice(i, 1);
           score++;
           spawnGem();
-          spawnEnemy(); // new enemy each time you score
+          spawnEnemy();
+          if (Math.random() < 0.3) spawnPowerup();
+        }
+      }
+
+      // Collision with powerups
+      for (let i = 0; i < powerups.length; i++) {
+        let p = powerups[i];
+        if (
+          player.x < p.x + p.size &&
+          player.x + player.size > p.x &&
+          player.y < p.y + p.size &&
+          player.y + player.size > p.y
+        ) {
+          if (p.type === "speed") {
+            player.speed = 6; // double speed
+            setTimeout(() => (player.speed = player.normalSpeed), 5000);
+          } else if (p.type === "shield") {
+            player.shield = true;
+          }
+          powerups.splice(i, 1);
         }
       }
 
@@ -138,10 +203,10 @@
     }
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowUp" && player.y > 0) player.y -= player.speed;
-      if (e.key === "ArrowDown" && player.y < canvas.height - player.size) player.y += player.speed;
-      if (e.key === "ArrowLeft" && player.x > 0) player.x -= player.speed;
-      if (e.key === "ArrowRight" && player.x < canvas.width - player.size) player.x += player.speed;
+      keys[e.key] = true;
+    });
+    window.addEventListener("keyup", (e) => {
+      keys[e.key] = false;
     });
 
     spawnGem();
