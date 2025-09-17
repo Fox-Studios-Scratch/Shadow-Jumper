@@ -34,6 +34,7 @@
     let score = 0;
     let gameOver = false;
     let keys = {}; // track pressed keys
+    let gemsCollected = 0;
 
     function getRandomGridPos(size) {
       return Math.floor(Math.random() * ((canvas.width - size) / size)) * size;
@@ -49,12 +50,17 @@
     }
 
     function spawnEnemy() {
-      enemies.push({
-        x: Math.random() * (canvas.width - 20),
-        y: Math.random() * (canvas.height - 20),
-        size: 20,
-        speed: 1 + Math.random() * 1.5
-      });
+      let enemy;
+      let safeDistance = 80; // min distance from player
+      do {
+        enemy = {
+          x: Math.random() * (canvas.width - 20),
+          y: Math.random() * (canvas.height - 20),
+          size: 20,
+          speed: 1 + Math.random() * 1.5
+        };
+      } while (Math.hypot(enemy.x - player.x, enemy.y - player.y) < safeDistance);
+      enemies.push(enemy);
     }
 
     function spawnPowerup() {
@@ -174,9 +180,14 @@
         ) {
           gems.splice(i, 1);
           score++;
+          gemsCollected++;
           spawnGem();
-          spawnEnemy();
-          if (Math.random() < 0.3) spawnPowerup();
+
+          // only spawn enemy every 3 gems
+          if (gemsCollected % 3 === 0) spawnEnemy();
+
+          // higher chance of powerups (50%)
+          if (Math.random() < 0.5) spawnPowerup();
         }
       }
 
@@ -190,7 +201,7 @@
           player.y + player.size > p.y
         ) {
           if (p.type === "speed") {
-            player.speed = 6; // double speed
+            player.speed = 6;
             setTimeout(() => (player.speed = player.normalSpeed), 5000);
           } else if (p.type === "shield") {
             player.shield = true;
